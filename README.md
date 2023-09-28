@@ -13,7 +13,7 @@ To run demo vote programs, run:
 ## Programs structure
 
 ```md
-eccelgamal-voting
+evoting
 ├── config
 │   ├── curve
 │   ├── vote_config
