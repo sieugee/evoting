@@ -166,17 +166,16 @@ class ECCElGamal
             this->public_key_beta = private_key_factor * public_key_alpha;
         }
 
-        ECCElGamalCipherText encrypt(ECn plain_text_point)
+        ECCElGamalCipherText encrypt(ECn plain_text_point, Big random_number)
         {
             ECn cipher_text_point_1;
             ECn cipher_text_point_2;
 
             /// Encrypt operation
             ecurve(curve.a, curve.b, curve.p, MR_AFFINE);
-            Big k = rand(Big(9999)); /// Should have been curve.p but this is just for demo
 
-            cipher_text_point_1 = k * public_key_alpha;
-            cipher_text_point_2 = k * public_key_beta;
+            cipher_text_point_1 = random_number * public_key_alpha;
+            cipher_text_point_2 = random_number * public_key_beta;
             cipher_text_point_2 += plain_text_point;
 
             ECCElGamalCipherText cipher_text;

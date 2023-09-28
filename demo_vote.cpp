@@ -36,12 +36,31 @@ int main(int argc,char **argv)
 
     this_vote.getCandidateList(list_of_candidates);
 
+    uint32_t number_of_invalid_votes = 0;
+
     for ( uint32_t i = 0; i < number_of_votes; i++ )
     {
+        /// User vote for a candidate
+        VoteConfirmation confirmation_values[number_of_candidates];
         uint32_t chosen_candidate = rand() % number_of_candidates;
-        plain_votes[chosen_candidate]++;
-        ECCElGamalCipherText tmp_vote = this_vote.voteForACandidate(chosen_candidate, list_of_candidates);
-        this_vote.updateVotedBallot(tmp_vote);
+        ECCElGamalCipherText tmp_vote = this_vote.voteForACandidate(chosen_candidate, list_of_candidates, confirmation_values);
+
+        /// Just for demo: Break the 3rd vote to make it invalid
+        if ( i == 2 )
+        {
+            tmp_vote.cipher_text_r = 3 * generator_point;
+        }
+
+        /// Server confirm vote's validity and add the vote
+        if ( this_vote.confirmVoteValidity(tmp_vote, list_of_candidates, confirmation_values) )
+        {
+            plain_votes[chosen_candidate]++;
+            this_vote.updateVotedBallot(tmp_vote);
+        }
+        else
+        {
+            number_of_invalid_votes++;
+        }
     }
 
     ofstream plain_vote_file;
@@ -57,6 +76,7 @@ int main(int argc,char **argv)
     plain_vote_file.close();
 
     cout << "Finish " << number_of_votes << " votes.\n";
+    cout << number_of_invalid_votes << " invalid votes detected.\n";
     cout << "The encrypted result is in " << ENCRYPTED_VOTES <<"\n";
     cout << "Plain vote result to check is in " << PLAIN_VOTES_TO_CHECK << "\n";
     cout << "---------------\n";

@@ -3,8 +3,47 @@
 
 #include <iostream>
 #include <limits>
+#include <random>
 
 #include "eccElGamal.hpp"
+
+#define MAX_RANDOM 100 /// Need this because type check for random calculations are messy
+
+class VoteConfirmation
+{
+    public:
+        int32_t first_factor;
+        int32_t second_factor;
+        ECn first_point;
+        ECn second_point;
+
+        /// Default constructor
+        VoteConfirmation()
+        {
+            first_factor = 0;
+            second_factor = 0;
+            first_point = ECn(0,0);
+            second_point = ECn(0,0);
+        }
+
+        /// Constructor
+        VoteConfirmation(ECn public_key_alpha, ECn public_key_beta, ECn candidate_pnt, ECCElGamalCipherText encrypted_vote)
+        {
+            /// We can use this because the output is 64-bit, lower than 160-bit
+            std::mt19937 gen (std::random_device{}());
+            this->first_factor = (gen() % MAX_RANDOM);
+            this->second_factor = (gen() % MAX_RANDOM);
+
+            first_point = first_factor * public_key_alpha;
+            first_point += second_factor * encrypted_vote.cipher_text_r;
+
+            second_point = encrypted_vote.cipher_text_t;
+            second_point -= candidate_pnt;
+            second_point = second_factor * second_point;
+            second_point += first_factor * public_key_beta;
+        }
+
+};
 
 class EVoting
 {
@@ -33,7 +72,7 @@ class EVoting
 
         }
 
-        /// @brief Initialize an empty vote
+        /// @brief Initialize an empty vote process
         void init()
         {
             ofstream votes_file;
@@ -55,7 +94,7 @@ class EVoting
             votes_file.close();
         }
 
-        /// @brief Read vote config to construc the class
+        /// @brief Read vote config to construct the class
         static void readVoteConfig(uint32_t* number_of_candidates, uint32_t* number_of_votes)
         {
             ifstream config_vote;
@@ -152,12 +191,106 @@ class EVoting
 
         /// @brief Vote for a candidate
         /// @param candidate_number Number representing that candidate
+        /// @param candidate_ptr (Input) List of candidate points
+        /// @param list_of_values (Output) List of confirmation values to check for encrypted vote validity
         /// @return Encrypted vote 
-        ECCElGamalCipherText voteForACandidate(uint32_t candidate_number, ECn* const candidate_ptr)
+        ECCElGamalCipherText voteForACandidate(uint32_t candidate_number, ECn* const candidate_ptr, VoteConfirmation* list_of_confirmation_values)
         {
+            std::mt19937 gen (std::random_device{}());
+            uint32_t random_number_for_encryption = (gen() % MAX_RANDOM);
+
             ECn candidate_point = *(candidate_ptr + candidate_number);
-            ECCElGamalCipherText vote = crypto_curve_in_use.encrypt(candidate_point);
+            ECCElGamalCipherText vote = crypto_curve_in_use.encrypt(candidate_point, Big(random_number_for_encryption));
+
+            /// Prepare the list of confirmation values;
+            for ( uint32_t i = 0; i < number_of_candidates; i++ )
+            {
+                *(list_of_confirmation_values+i) = VoteConfirmation(
+                                                    crypto_curve_in_use.public_key_alpha,
+                                                    crypto_curve_in_use.public_key_beta,
+                                                    *(candidate_ptr + i), vote);
+            }
+
+            uint32_t tmp_factor = static_cast<int32_t>(gen() % MAX_RANDOM);
+            (list_of_confirmation_values+candidate_number)->first_point = tmp_factor * crypto_curve_in_use.public_key_alpha;
+            (list_of_confirmation_values+candidate_number)->second_point = tmp_factor * crypto_curve_in_use.public_key_beta;
+            
+
+            ECn tmp_pnt = 0 * crypto_curve_in_use.public_key_alpha;
+            int32_t tmp_sum = 0;
+            for ( uint32_t i = 0; i < number_of_candidates; i++)
+            {
+                tmp_pnt += (list_of_confirmation_values+i)->first_point;
+                tmp_pnt += (list_of_confirmation_values+i)->second_point;
+                tmp_sum += (list_of_confirmation_values+i)->second_factor;
+            }
+            tmp_sum -= (list_of_confirmation_values+candidate_number)->second_factor;
+            Big tmp_x, tmp_y;
+            char str_x[100], str_y[100];
+            tmp_pnt.get(tmp_x, tmp_y);
+            str_x << tmp_x;
+            str_y << tmp_y;
+            string all_point_str = getECPointIdString(str_x, str_y);
+            int32_t all_point_hash = static_cast<int32_t>(hash<string>()(all_point_str) % MAX_RANDOM);
+            
+            (list_of_confirmation_values+candidate_number)->second_factor = all_point_hash - tmp_sum;
+            (list_of_confirmation_values+candidate_number)->first_factor = tmp_factor - ((list_of_confirmation_values+candidate_number)->second_factor * static_cast<int32_t>(random_number_for_encryption));
+
+            // cout << "Factors: " << (list_of_confirmation_values+candidate_number)->first_factor << " - " << (list_of_confirmation_values+candidate_number)->second_factor << "\n";
+            // cout << "Tmp factors: " << tmp_factor << "\n";
+            // cout << "r_cp: " << random_number_for_encryption << "\n";
+            // cout << "u_cp*r_cp = " << ((list_of_confirmation_values+candidate_number)->second_factor * static_cast<int32_t>(random_number_for_encryption)) << "\n";
+
             return vote;
+        }
+
+        /// @brief Confirm whether the encrypted vote is valid
+        /// @param vote The encrypted vote to check
+        /// @param candidate_ptr (Input) List of candidate points
+        /// @param list_of_values (Input) List of vote confirmation values
+        /// @return Is the encrypted vote valid?
+        bool confirmVoteValidity(ECCElGamalCipherText vote, ECn* const candidate_ptr, VoteConfirmation* const list_of_values)
+        {
+            ECn tmp_pnt = 0 * crypto_curve_in_use.public_key_alpha;
+            size_t second_factor_sum = 0;
+            for ( uint32_t i = 0; i < number_of_candidates; i++)
+            {
+                ECn checked_first_point, checked_second_point;
+                checked_first_point = (list_of_values+i)->first_factor * crypto_curve_in_use.public_key_alpha;
+                checked_first_point += (list_of_values+i)->second_factor * vote.cipher_text_r;
+
+                if ( checked_first_point != (list_of_values+i)->first_point )
+                {
+                    return false;
+                }
+                tmp_pnt += checked_first_point;
+
+                checked_second_point = vote.cipher_text_t;
+                checked_second_point -= *(candidate_ptr+i);
+                checked_second_point = (list_of_values+i)->second_factor * checked_second_point;
+                checked_second_point += (list_of_values+i)->first_factor * crypto_curve_in_use.public_key_beta;
+                if ( checked_second_point != (list_of_values+i)->second_point )
+                {
+                    return false;
+                }
+                tmp_pnt += checked_second_point;
+
+                second_factor_sum += (list_of_values+i)->second_factor;
+            }
+
+            Big tmp_x, tmp_y;
+            char str_x[100], str_y[100];
+            tmp_pnt.get(tmp_x, tmp_y);
+            str_x << tmp_x;
+            str_y << tmp_y;
+            string all_point_str = getECPointIdString(str_x, str_y);
+            int32_t all_point_hash = static_cast<int32_t>(hash<string>()(all_point_str) % MAX_RANDOM);
+            if ( all_point_hash != second_factor_sum )
+            {
+                return false;
+            }
+
+            return true;
         }
 
         /// @brief Get total vote from db file
