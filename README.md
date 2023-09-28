@@ -22,11 +22,11 @@ evoting
 │   ├── demo_vote.o
 │   ├── vote_prepare.o
 ├── plain_db
-│   ├── candidates
-│   ├── combination_array
-│   └── combination_hash
-│   ├── encrypted_votes
-│   └── plain_votes
+    ├── candidates
+    ├── combination_array
+    └── combination_hash
+    ├── encrypted_votes
+    └── plain_votes
 ```
 
 ### Config
