@@ -13,7 +13,7 @@ To run demo vote programs, run:
 ## Programs structure
 
 ```md
-eccelgamal-voting
+evoting
 ├── config
 │   ├── curve
 │   ├── vote_config
@@ -22,11 +22,11 @@ eccelgamal-voting
 │   ├── demo_vote.o
 │   ├── vote_prepare.o
 ├── plain_db
-│   ├── candidates
-│   ├── combination_array
-│   └── combination_hash
-│   ├── encrypted_votes
-│   └── plain_votes
+    ├── candidates
+    ├── combination_array
+    └── combination_hash
+    ├── encrypted_votes
+    └── plain_votes
 ```
 
 ### Config
