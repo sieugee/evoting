@@ -304,7 +304,7 @@ class EVoting
 
             /// Get current total vote
             votes_file.open(ENCRYPTED_VOTES, ios::in|ios::binary);
-            if ( !votes_file )
+            if ( !votes_file.is_open() )
             {
                 cout << "No existing vote results\n";
                 exit(-1);

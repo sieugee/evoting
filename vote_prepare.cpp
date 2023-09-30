@@ -65,5 +65,13 @@ int main(int argc,char **argv)
     cout.rdbuf(console_buf);
     outfile.close();
 
+    /// Empty voters and plain_votes file
+    outfile.open(VOTERS, ios::trunc|ios::binary);
+    outfile << "";
+    outfile.close();
+    outfile.open(PLAIN_VOTES_TO_CHECK, ios::trunc|ios::binary);
+    outfile << "";
+    outfile.close();
+
     return 0;
 }
